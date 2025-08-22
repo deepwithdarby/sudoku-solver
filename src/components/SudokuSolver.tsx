@@ -1,17 +1,20 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, Camera, Loader2, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-// Note: The SudokuGrid interface is no longer needed in the frontend since the
-// new API endpoint returns the full solved grid, not just a recognized one.
+// Define the interface for the recognized grid
+interface SudokuGrid {
+  grid: number[][];
+}
 
 const SudokuSolver: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [recognizedGrid, setRecognizedGrid] = useState<number[][] | null>(null);
   const [solvedGrid, setSolvedGrid] = useState<number[][] | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -27,6 +30,7 @@ const SudokuSolver: React.FC = () => {
       setImagePreview(e.target?.result as string);
     };
     reader.readAsDataURL(file);
+    setRecognizedGrid(null); // Reset both grids on new image select
     setSolvedGrid(null);
   }, []);
 
@@ -50,8 +54,53 @@ const SudokuSolver: React.FC = () => {
     setIsDragOver(false);
   }, []);
 
-  // This is the updated function that calls the new secure API route.
-  const handleSolvePuzzle = async () => {
+  // This is the Sudoku solving function, which now runs on the frontend
+  const solveSudoku = (grid: number[][]): number[][] | null => {
+    const board = grid.map(row => [...row]);
+    
+    const isValid = (board: number[][], row: number, col: number, num: number): boolean => {
+      for (let i = 0; i < 9; i++) {
+        if (board[row][i] === num) return false;
+      }
+      for (let i = 0; i < 9; i++) {
+        if (board[i][col] === num) return false;
+      }
+      const boxRow = Math.floor(row / 3) * 3;
+      const boxCol = Math.floor(col / 3) * 3;
+      for (let i = boxRow; i < boxRow + 3; i++) {
+        for (let j = boxCol; j < boxCol + 3; j++) {
+          if (board[i][j] === num) return false;
+        }
+      }
+      return true;
+    };
+
+    const solve = (board: number[][]): boolean => {
+      for (let row = 0; row < 9; row++) {
+        for (let col = 0; col < 9; col++) {
+          if (board[row][col] === 0) {
+            for (let num = 1; num <= 9; num++) {
+              if (isValid(board, row, col, num)) {
+                board[row][col] = num;
+                if (solve(board)) return true;
+                board[row][col] = 0;
+              }
+            }
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+
+    if (solve(board)) {
+      return board;
+    }
+    return null;
+  };
+
+  // This function recognizes the grid by calling the new API route
+  const handleRecognizePuzzle = async () => {
     if (!selectedImage || !imagePreview) {
       toast.error('Please select an image first');
       return;
@@ -59,10 +108,9 @@ const SudokuSolver: React.FC = () => {
 
     setIsProcessing(true);
     try {
-      toast.info('Sending image to server...');
+      toast.info('Sending image to server for recognition...');
       
-      // Call the new secure API route instead of the Gemini API directly.
-      const response = await fetch('/api/solve-sudoku', {
+      const response = await fetch('/api/recognize-sudoku', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -71,11 +119,25 @@ const SudokuSolver: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to process puzzle on the server.');
+        throw new Error('Failed to recognize puzzle on the server.');
       }
 
-      const data = await response.json();
-      const solution = data.solvedGrid;
+      const data: { recognizedGrid: number[][] } = await response.json();
+      setRecognizedGrid(data.recognizedGrid);
+      toast.success('Puzzle recognized successfully!');
+    } catch (error) {
+      console.error('Error recognizing puzzle:', error);
+      toast.error('Failed to process the puzzle. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // This effect will run when a recognized grid is available
+  useEffect(() => {
+    if (recognizedGrid) {
+      toast.info('Solving puzzle locally...');
+      const solution = solveSudoku(recognizedGrid);
       
       if (solution) {
         setSolvedGrid(solution);
@@ -83,15 +145,11 @@ const SudokuSolver: React.FC = () => {
       } else {
         toast.error('No solution found for this puzzle');
       }
-    } catch (error) {
-      console.error('Error solving puzzle:', error);
-      toast.error('Failed to process the puzzle. Please try again.');
-    } finally {
-      setIsProcessing(false);
     }
-  };
+  }, [recognizedGrid]);
 
-  const renderSudokuGrid = (grid: number[][]) => {
+
+  const renderSudokuGrid = (grid: number[][], isSolved: boolean) => {
     return (
       <div className="grid grid-cols-9 gap-0 w-full max-w-lg mx-auto border-2 border-primary rounded-lg overflow-hidden bg-card shadow-card">
         {grid.map((row, rowIndex) =>
@@ -107,7 +165,7 @@ const SudokuSolver: React.FC = () => {
               )}
             >
               {cell !== 0 && (
-                <span className="text-foreground">{cell}</span>
+                <span className={cn({ "text-foreground": !isSolved, "text-green-500": isSolved })}>{cell}</span>
               )}
             </div>
           ))
@@ -124,12 +182,11 @@ const SudokuSolver: React.FC = () => {
             Sudoku Solver
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Upload an image of a Sudoku puzzle and let AI solve it for you using advanced image recognition and backtracking algorithms.
+            Upload an image of a Sudoku puzzle and let AI solve it for you.
           </p>
         </div>
 
         <div className="max-w-4xl mx-auto space-y-8">
-          {/* Upload Area */}
           <Card className="shadow-card">
             <CardContent className="p-8">
               <div
@@ -172,13 +229,13 @@ const SudokuSolver: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Image Preview / Solution Display */}
-          {(imagePreview || solvedGrid) && (
+          {/* Display areas for image and grids */}
+          {(imagePreview || recognizedGrid) && (
             <Card className="shadow-card">
               <CardContent className="p-8">
                 <div className="grid md:grid-cols-2 gap-8 items-start">
                   {/* Image Preview */}
-                  {imagePreview && !solvedGrid && (
+                  {imagePreview && (
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold">Original Puzzle</h3>
                       <div className="rounded-lg overflow-hidden shadow-lg">
@@ -191,6 +248,14 @@ const SudokuSolver: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Recognized Grid */}
+                  {recognizedGrid && !solvedGrid && (
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Recognized Grid</h3>
+                      {renderSudokuGrid(recognizedGrid, false)}
+                    </div>
+                  )}
+
                   {/* Solved Grid */}
                   {solvedGrid && (
                     <div className="space-y-4 md:col-span-2">
@@ -198,44 +263,45 @@ const SudokuSolver: React.FC = () => {
                         <CheckCircle className="w-6 h-6 text-green-500" />
                         <h3 className="text-lg font-semibold">Solved Puzzle</h3>
                       </div>
-                      {renderSudokuGrid(solvedGrid)}
+                      {renderSudokuGrid(solvedGrid, true)}
                     </div>
                   )}
                 </div>
 
-                {/* Solve Button */}
-                {imagePreview && !solvedGrid && (
+                {/* Button to trigger recognition */}
+                {imagePreview && !recognizedGrid && (
                   <div className="flex justify-center mt-8">
                     <Button
                       variant="solve"
                       size="lg"
-                      onClick={handleSolvePuzzle}
+                      onClick={handleRecognizePuzzle}
                       disabled={isProcessing}
                       className="min-w-48"
                     >
                       {isProcessing ? (
                         <>
                           <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                          Processing...
+                          Recognizing...
                         </>
                       ) : (
                         <>
                           <Camera className="w-5 h-5 mr-2" />
-                          Solve Puzzle
+                          Recognize Puzzle
                         </>
                       )}
                     </Button>
                   </div>
                 )}
-
+                
                 {/* Reset Button */}
-                {solvedGrid && (
+                {recognizedGrid && (
                   <div className="flex justify-center mt-8">
                     <Button
                       variant="outline"
                       onClick={() => {
                         setSelectedImage(null);
                         setImagePreview(null);
+                        setRecognizedGrid(null);
                         setSolvedGrid(null);
                       }}
                     >
@@ -253,4 +319,3 @@ const SudokuSolver: React.FC = () => {
 };
 
 export default SudokuSolver;
-
