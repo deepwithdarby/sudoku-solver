@@ -7,10 +7,17 @@ import { toast } from 'sonner';
 
 const Welcome = () => {
   const [timeLeft, setTimeLeft] = useState(30);
-  const [isEnabled, setIsEnabled] = useState(false);
+  const [isEnabled, setIsEnabled] = useState(() => {
+    return localStorage.getItem('sudoku-rules-read') === 'true';
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Skip timer if user has already read rules
+    if (localStorage.getItem('sudoku-rules-read') === 'true') {
+      return;
+    }
+    
     if (timeLeft > 0) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
@@ -24,6 +31,7 @@ const Welcome = () => {
       toast.error(`Read the rules properly before uploading the image. Your main page should open in ${timeLeft} seconds`);
       return;
     }
+    localStorage.setItem('sudoku-rules-read', 'true');
     navigate('/solver');
   };
 
@@ -74,29 +82,7 @@ const Welcome = () => {
           </p>
         </div>
 
-        <Card className="mb-8 border-primary/20 shadow-elegant">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl text-primary flex items-center justify-center gap-2">
-              <CheckCircle className="h-6 w-6" />
-              Best Practices for Uploading Sudoku Images
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {rules.map((rule, index) => (
-              <div key={index} className="flex gap-4 p-4 rounded-lg bg-card/50 border border-border/50">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-sm">
-                  {index + 1}
-                </div>
-                <div>
-                  <h3 className="font-semibold text-foreground mb-1">{rule.title}</h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed">{rule.description}</p>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <div className="text-center">
+        <div className="text-center mb-8">
           <Button
             onClick={handleGetStarted}
             disabled={!isEnabled}
@@ -120,6 +106,28 @@ const Welcome = () => {
             </p>
           )}
         </div>
+
+        <Card className="border-primary/20 shadow-elegant">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl text-primary flex items-center justify-center gap-2">
+              <CheckCircle className="h-6 w-6" />
+              Best Practices for Uploading Sudoku Images
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {rules.map((rule, index) => (
+              <div key={index} className="flex gap-4 p-4 rounded-lg bg-card/50 border border-border/50">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-sm">
+                  {index + 1}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground mb-1">{rule.title}</h3>
+                  <p className="text-muted-foreground text-sm leading-relaxed">{rule.description}</p>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
