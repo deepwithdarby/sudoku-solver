@@ -52,7 +52,11 @@ const SudokuSolver: React.FC = () => {
   }, []);
 
   const recognizeSudoku = async (imageBase64: string): Promise<number[][]> => {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=AIzaSyA9IcYI-RNy5FtYCtUyyUh1oTJzcaeEfVY', {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('VITE_GEMINI_API_KEY is not set in the environment.');
+    }
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
