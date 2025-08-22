@@ -82,7 +82,15 @@ const SudokuSolver: React.FC = () => {
     const text = data.candidates[0].content.parts[0].text;
     
     try {
-      const grid = JSON.parse(text.trim());
+      // Remove markdown code blocks if present
+      let cleanedText = text.trim();
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/```\s*/, '').replace(/\s*```$/, '');
+      }
+      
+      const grid = JSON.parse(cleanedText);
       if (!Array.isArray(grid) || grid.length !== 9 || !grid.every(row => Array.isArray(row) && row.length === 9)) {
         throw new Error('Invalid grid format');
       }
