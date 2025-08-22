@@ -5,9 +5,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-interface SudokuGrid {
-  grid: number[][];
-}
+// Note: The SudokuGrid interface is no longer needed in the frontend since the
+// new API endpoint returns the full solved grid, not just a recognized one.
 
 const SudokuSolver: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -51,105 +50,7 @@ const SudokuSolver: React.FC = () => {
     setIsDragOver(false);
   }, []);
 
-  const recognizeSudoku = async (imageBase64: string): Promise<number[][]> => {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=AIzaSyA9IcYI-RNy5FtYCtUyyUh1oTJzcaeEfVY', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            {
-              text: "Analyze this Sudoku puzzle image and extract the numbers in a 9x9 grid format. Return ONLY a JSON array of arrays representing the grid, where empty cells are represented as 0. For example: [[5,3,0,0,7,0,0,0,0],[6,0,0,1,9,5,0,0,0],...]. Do not include any other text, explanations, or formatting - just the raw JSON array."
-            },
-            {
-              inline_data: {
-                mime_type: "image/jpeg",
-                data: imageBase64.split(',')[1]
-              }
-            }
-          ]
-        }]
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to analyze image with Gemini API');
-    }
-
-    const data = await response.json();
-    const text = data.candidates[0].content.parts[0].text;
-    
-    try {
-      // Remove markdown code blocks if present
-      let cleanedText = text.trim();
-      if (cleanedText.startsWith('```json')) {
-        cleanedText = cleanedText.replace(/```json\s*/, '').replace(/\s*```$/, '');
-      } else if (cleanedText.startsWith('```')) {
-        cleanedText = cleanedText.replace(/```\s*/, '').replace(/\s*```$/, '');
-      }
-      
-      const grid = JSON.parse(cleanedText);
-      if (!Array.isArray(grid) || grid.length !== 9 || !grid.every(row => Array.isArray(row) && row.length === 9)) {
-        throw new Error('Invalid grid format');
-      }
-      return grid;
-    } catch (error) {
-      throw new Error('Failed to parse Sudoku grid from AI response');
-    }
-  };
-
-  const solveSudoku = (grid: number[][]): number[][] | null => {
-    const board = grid.map(row => [...row]);
-    
-    const isValid = (board: number[][], row: number, col: number, num: number): boolean => {
-      // Check row
-      for (let i = 0; i < 9; i++) {
-        if (board[row][i] === num) return false;
-      }
-      
-      // Check column
-      for (let i = 0; i < 9; i++) {
-        if (board[i][col] === num) return false;
-      }
-      
-      // Check 3x3 box
-      const boxRow = Math.floor(row / 3) * 3;
-      const boxCol = Math.floor(col / 3) * 3;
-      for (let i = boxRow; i < boxRow + 3; i++) {
-        for (let j = boxCol; j < boxCol + 3; j++) {
-          if (board[i][j] === num) return false;
-        }
-      }
-      
-      return true;
-    };
-
-    const solve = (board: number[][]): boolean => {
-      for (let row = 0; row < 9; row++) {
-        for (let col = 0; col < 9; col++) {
-          if (board[row][col] === 0) {
-            for (let num = 1; num <= 9; num++) {
-              if (isValid(board, row, col, num)) {
-                board[row][col] = num;
-                if (solve(board)) return true;
-                board[row][col] = 0;
-              }
-            }
-            return false;
-          }
-        }
-      }
-      return true;
-    };
-
-    if (solve(board)) {
-      return board;
-    }
-    return null;
-  };
-
+  // This is the updated function that calls the new secure API route.
   const handleSolvePuzzle = async () => {
     if (!selectedImage || !imagePreview) {
       toast.error('Please select an image first');
@@ -158,11 +59,23 @@ const SudokuSolver: React.FC = () => {
 
     setIsProcessing(true);
     try {
-      toast.info('Analyzing image with AI...');
-      const recognizedGrid = await recognizeSudoku(imagePreview);
+      toast.info('Sending image to server...');
       
-      toast.info('Solving puzzle...');
-      const solution = solveSudoku(recognizedGrid);
+      // Call the new secure API route instead of the Gemini API directly.
+      const response = await fetch('/api/solve-sudoku', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageBase64: imagePreview }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process puzzle on the server.');
+      }
+
+      const data = await response.json();
+      const solution = data.solvedGrid;
       
       if (solution) {
         setSolvedGrid(solution);
@@ -340,3 +253,4 @@ const SudokuSolver: React.FC = () => {
 };
 
 export default SudokuSolver;
+
